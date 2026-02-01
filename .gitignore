@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+
+# Data (too large for git)
+data/*.csv
+data/lily-datasets/
+
+# Models (binary files)
+models/*.pt
+models/bootstrap/
+
+# Results
+results/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
