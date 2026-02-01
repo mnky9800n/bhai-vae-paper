@@ -188,10 +188,11 @@ def fig_reconstruction_scatter(X_scaled, pred_unsup, pred_semisup, save_path=Non
 
 def fig_roc_comparison(emb_unsup, emb_semisup, labels, n_classes, 
                        max_samples=50000, save_path=None):
-    """Create fair ROC comparison using same classifier on both embeddings."""
+    """Create fair ROC comparison using SVM on both embeddings."""
     from sklearn.metrics import roc_curve, auc
-    from sklearn.preprocessing import label_binarize
-    from catboost import CatBoostClassifier
+    from sklearn.preprocessing import label_binarize, StandardScaler
+    from sklearn.svm import SVC
+    from sklearn.model_selection import train_test_split
     
     if len(labels) > max_samples:
         np.random.seed(42)
@@ -200,28 +201,42 @@ def fig_roc_comparison(emb_unsup, emb_semisup, labels, n_classes,
         emb_semisup = emb_semisup[idx]
         labels = labels[idx]
     
-    n = len(labels)
-    n_train = int(0.8 * n)
+    # Train/test split
+    X_unsup_train, X_unsup_test, y_train, y_test = train_test_split(
+        emb_unsup, labels, test_size=0.2, random_state=42
+    )
+    X_semisup_train, X_semisup_test, _, _ = train_test_split(
+        emb_semisup, labels, test_size=0.2, random_state=42
+    )
     
-    print("Training CatBoost on unsupervised embeddings...")
-    clf_unsup = CatBoostClassifier(iterations=500, verbose=False, random_state=42)
-    clf_unsup.fit(emb_unsup[:n_train], labels[:n_train])
+    # Scale embeddings
+    scaler_unsup = StandardScaler()
+    X_unsup_train = scaler_unsup.fit_transform(X_unsup_train)
+    X_unsup_test = scaler_unsup.transform(X_unsup_test)
     
-    print("Training CatBoost on semi-supervised embeddings...")
-    clf_semisup = CatBoostClassifier(iterations=500, verbose=False, random_state=42)
-    clf_semisup.fit(emb_semisup[:n_train], labels[:n_train])
+    scaler_semisup = StandardScaler()
+    X_semisup_train = scaler_semisup.fit_transform(X_semisup_train)
+    X_semisup_test = scaler_semisup.transform(X_semisup_test)
     
-    prob_unsup = clf_unsup.predict_proba(emb_unsup[n_train:])
-    prob_semisup = clf_semisup.predict_proba(emb_semisup[n_train:])
+    print("Training SVM on unsupervised embeddings...")
+    svm_unsup = SVC(kernel='rbf', C=1.0, probability=True, random_state=42)
+    svm_unsup.fit(X_unsup_train, y_train)
     
-    y_test = labels[n_train:]
+    print("Training SVM on semi-supervised embeddings...")
+    svm_semisup = SVC(kernel='rbf', C=1.0, probability=True, random_state=42)
+    svm_semisup.fit(X_semisup_train, y_train)
+    
+    prob_unsup = svm_unsup.predict_proba(X_unsup_test)
+    prob_semisup = svm_semisup.predict_proba(X_semisup_test)
+    
     y_test_bin = label_binarize(y_test, classes=range(n_classes))
     
+    # Handle class mismatch (SVM may not see all classes in training)
     prob_unsup_full = np.zeros((len(y_test), n_classes))
     prob_semisup_full = np.zeros((len(y_test), n_classes))
-    for i, c in enumerate(clf_unsup.classes_):
+    for i, c in enumerate(svm_unsup.classes_):
         prob_unsup_full[:, c] = prob_unsup[:, i]
-    for i, c in enumerate(clf_semisup.classes_):
+    for i, c in enumerate(svm_semisup.classes_):
         prob_semisup_full[:, c] = prob_semisup[:, i]
     
     fpr_unsup, tpr_unsup, _ = roc_curve(y_test_bin.ravel(), prob_unsup_full.ravel())
@@ -240,7 +255,7 @@ def fig_roc_comparison(emb_unsup, emb_semisup, labels, n_classes,
     
     ax.set_xlabel('False Positive Rate', fontsize=14)
     ax.set_ylabel('True Positive Rate', fontsize=14)
-    ax.set_title('Lithology Classification: ROC Comparison', fontsize=12, fontweight='bold')
+    ax.set_title('Lithology Classification: SVM ROC Comparison', fontsize=12, fontweight='bold')
     ax.legend(loc='lower right', fontsize=11)
     ax.set_xlim([0, 1])
     ax.set_ylim([0, 1.02])
