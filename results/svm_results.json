@@ -1,0 +1,20 @@
+{
+  "unsupervised": {
+    "accuracy": 0.47,
+    "f1_macro": 0.16258808347104922,
+    "roc_auc_micro": null
+  },
+  "semisupervised": {
+    "accuracy": 0.567,
+    "f1_macro": 0.21915955836649084,
+    "roc_auc_micro": null
+  },
+  "config": {
+    "kernel": "rbf",
+    "C": 1.0,
+    "test_size": 0.2,
+    "n_classes": 139,
+    "n_train": 8000,
+    "n_test": 2000
+  }
+}
