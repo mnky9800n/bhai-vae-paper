@@ -1,0 +1,69 @@
+============================================================
+1337 MODE: 100 bootstrap iterations per variable
+============================================================
+Loading training data and models...
+Training samples: 238,506
+
+[1/?] Depth baseline...
+    R²: unsup=0.559 [0.538-0.579], semi=0.643 [0.624-0.663]
+
+[2/?] AVS...
+    Matched 1,130 samples
+    Processed 3 variables
+
+[3/?] CARB...
+    Matched 5,820 samples
+    Processed 7 variables
+
+[4/?] GE...
+    Matched 4,332 samples
+    Processed 16 variables
+
+[5/?] ICP...
+    Matched 1,739 samples
+    Processed 80 variables
+
+[6/?] IW...
+    Matched 2,487 samples
+    Processed 76 variables
+
+[7/?] JR6A...
+    Matched 26,462 samples
+    Processed 17 variables
+
+[8/?] KAPPA...
+    Matched 1,342 samples
+    Processed 16 variables
+
+[9/?] MAD...
+    Matched 12,113 samples
+    Processed 18 variables
+
+[10/?] PEN...
+    Matched 1,731 samples
+    Processed 1 variables
+
+[11/?] PWB...
+    Matched 1,896 samples
+    Processed 7 variables
+
+[12/?] PWC...
+    Matched 12,387 samples
+    Processed 5 variables
+
+[13/?] SRMD...
+    Matched 18,823 samples
+    Processed 14 variables
+
+[14/?] TCON...
+    Matched 16,245 samples
+    Processed 5 variables
+
+[15/?] TOR...
+    Matched 522 samples
+    Processed 2 variables
+
+============================================================
+DONE! 268 variables in 82.0 min
+Semi wins: 201/249
+SAVED fig_r2_unsup_vs_semi.png 💀🔥

@@ -1,0 +1,27 @@
+============================================================
+1337 MODE: 100 bootstrap iterations per variable
+============================================================
+Loading training data and models...
+Training samples: 238,506
+
+[1/?] Depth baseline...
+    R²: unsup=0.559 [0.538-0.579], semi=0.643 [0.624-0.663]
+
+[2/?] AVS...
+    Matched 1,130 samples
+    Processed 3 variables
+
+[3/?] CARB...
+    Matched 5,820 samples
+    Processed 7 variables
+
+[4/?] GE...
+    Matched 4,332 samples
+    Processed 16 variables
+
+[5/?] ICP...
+    Matched 1,739 samples
+    Processed 80 variables
+
+[6/?] IW...
+    Matched 2,487 samples

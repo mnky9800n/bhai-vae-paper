@@ -1,0 +1,68 @@
+============================================================
+FULL-SAMPLE BOOTSTRAP (no train/test split)
+============================================================
+Loading training data and models...
+Training samples: 238,506
+
+[1/?] Depth baseline...
+  Depth: unsup=0.632 [0.622-0.639], semi=0.708 [0.699-0.714]
+
+[2/?] AVS...
+  Matched 6,246 samples
+  ✓ AVS: 5 variables
+
+[3/?] CARB...
+  Matched 35,420 samples
+  ✓ CARB: 10 variables
+
+[4/?] GE...
+  Matched 25,120 samples
+  ✓ GE: 22 variables
+
+[5/?] ICP...
+  Matched 10,069 samples
+  ✓ ICP: 127 variables
+
+[6/?] IW...
+  Matched 15,687 samples
+  ✓ IW: 156 variables
+
+[7/?] JR6A...
+  Matched 156,587 samples
+  ✓ JR6A: 19 variables
+
+[8/?] KAPPA...
+  Matched 8,229 samples
+  ✓ KAPPA: 18 variables
+
+[9/?] MAD...
+  Matched 72,365 samples
+  ✓ MAD: 20 variables
+
+[10/?] PEN...
+  Matched 10,127 samples
+  ✓ PEN: 3 variables
+
+[11/?] PWB...
+  Matched 11,176 samples
+  ✓ PWB: 9 variables
+
+[12/?] PWC...
+  Matched 73,934 samples
+  ✓ PWC: 7 variables
+
+[13/?] SRMD...
+  Matched 111,974 samples
+  ✓ SRMD: 16 variables
+
+[14/?] TCON...
+  Matched 94,285 samples
+  ✓ TCON: 8 variables
+
+[15/?] TOR...
+  Matched 3,059 samples
+  ✓ TOR: 4 variables
+
+============================================================
+Done! 425 variables → data/zeroshot_bootstrap_full.csv
+============================================================
