@@ -9,6 +9,8 @@ Usage:
     python regenerate_all_figures.py [--skip-training]
 """
 
+import random
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -18,6 +20,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
+import sys
+
+# Reproducibility
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+# Import model definitions from models/vae.py (single source of truth)
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from models.vae import VAE, SemiSupervisedVAE, DistributionAwareScaler
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import r2_score, roc_curve, auc
 from sklearn.svm import SVC
@@ -25,7 +41,6 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import cross_val_score
 import umap
-from pathlib import Path
 from datetime import datetime
 import argparse
 import shutil
@@ -50,140 +65,6 @@ N_EPOCHS = 100
 BATCH_SIZE = 256
 
 
-class DistributionAwareScaler:
-    def __init__(self):
-        self.scaler = StandardScaler()
-        self.signed_log_indices = [1, 2]
-        self.log_indices = [3, 4, 5]
-
-    def signed_log_transform(self, x):
-        return np.sign(x) * np.log1p(np.abs(x))
-
-    def fit_transform(self, X):
-        X_transformed = X.copy()
-        for idx in self.signed_log_indices:
-            X_transformed[:, idx] = self.signed_log_transform(X_transformed[:, idx])
-        for idx in self.log_indices:
-            X_transformed[:, idx] = np.log1p(X_transformed[:, idx])
-        return self.scaler.fit_transform(X_transformed)
-    
-    def transform(self, X):
-        X_transformed = X.copy()
-        for idx in self.signed_log_indices:
-            X_transformed[:, idx] = self.signed_log_transform(X_transformed[:, idx])
-        for idx in self.log_indices:
-            X_transformed[:, idx] = np.log1p(X_transformed[:, idx])
-        return self.scaler.transform(X_transformed)
-    
-    def inverse_transform(self, X_scaled):
-        X_transformed = self.scaler.inverse_transform(X_scaled)
-        X_original = X_transformed.copy()
-        for idx in self.signed_log_indices:
-            X_original[:, idx] = np.sign(X_transformed[:, idx]) * (np.exp(np.abs(X_transformed[:, idx])) - 1)
-        for idx in self.log_indices:
-            X_original[:, idx] = np.exp(X_transformed[:, idx]) - 1
-        return X_original
-
-
-class VAE(nn.Module):
-    """Unsupervised VAE with hybrid loss"""
-    def __init__(self, input_dim=6, latent_dim=10, hidden_dims=[64, 32]):
-        super().__init__()
-        self.latent_dim = latent_dim
-        
-        layers = []
-        prev_dim = input_dim
-        for h_dim in hidden_dims:
-            layers.extend([nn.Linear(prev_dim, h_dim), nn.ReLU(), nn.BatchNorm1d(h_dim)])
-            prev_dim = h_dim
-        self.encoder = nn.Sequential(*layers)
-        
-        self.fc_mu = nn.Linear(hidden_dims[-1], latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dims[-1], latent_dim)
-        
-        layers = []
-        prev_dim = latent_dim
-        for h_dim in reversed(hidden_dims):
-            layers.extend([nn.Linear(prev_dim, h_dim), nn.ReLU(), nn.BatchNorm1d(h_dim)])
-            prev_dim = h_dim
-        self.decoder = nn.Sequential(*layers)
-        self.fc_out = nn.Linear(hidden_dims[0], input_dim)
-    
-    def encode(self, x):
-        h = self.encoder(x)
-        return self.fc_mu(h), self.fc_logvar(h)
-    
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-    
-    def decode(self, z):
-        h = self.decoder(z)
-        return self.fc_out(h)
-    
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
-        recon = self.decode(z)
-        return recon, mu, logvar
-    
-    def get_embeddings(self, x):
-        mu, _ = self.encode(x)
-        return mu
-
-
-class SemiSupervisedVAE(nn.Module):
-    """Semi-supervised VAE with classification head"""
-    def __init__(self, input_dim=6, latent_dim=10, hidden_dims=[64, 32], n_classes=139):
-        super().__init__()
-        
-        layers = []
-        prev_dim = input_dim
-        for h_dim in hidden_dims:
-            layers.extend([nn.Linear(prev_dim, h_dim), nn.ReLU(), nn.BatchNorm1d(h_dim)])
-            prev_dim = h_dim
-        self.encoder = nn.Sequential(*layers)
-        
-        self.fc_mu = nn.Linear(hidden_dims[-1], latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dims[-1], latent_dim)
-        
-        layers = []
-        prev_dim = latent_dim
-        for h_dim in reversed(hidden_dims):
-            layers.extend([nn.Linear(prev_dim, h_dim), nn.ReLU(), nn.BatchNorm1d(h_dim)])
-            prev_dim = h_dim
-        self.decoder = nn.Sequential(*layers)
-        self.fc_out = nn.Linear(hidden_dims[0], input_dim)
-        
-        self.classifier = nn.Sequential(
-            nn.Linear(latent_dim, 64), nn.ReLU(), nn.Dropout(0.3),
-            nn.Linear(64, n_classes)
-        )
-    
-    def encode(self, x):
-        h = self.encoder(x)
-        return self.fc_mu(h), self.fc_logvar(h)
-    
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-    
-    def decode(self, z):
-        h = self.decoder(z)
-        return self.fc_out(h)
-    
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
-        recon = self.decode(z)
-        logits = self.classifier(mu)
-        return recon, mu, logvar, logits
-    
-    def get_embeddings(self, x):
-        mu, _ = self.encode(x)
-        return mu
 
 
 def train_model(X_train, y_train=None, supervised=False, n_classes=None, verbose=True):
@@ -267,14 +148,13 @@ def get_embeddings(model, X, supervised=False):
 
 
 def get_reconstructions(model, X, supervised=False):
-    """Get reconstructions from model."""
+    """Get deterministic reconstructions (using mu, no sampling noise)."""
     model.eval()
     with torch.no_grad():
         X_tensor = torch.FloatTensor(X).to(DEVICE)
-        if supervised:
-            recon, _, _, _ = model(X_tensor)
-        else:
-            recon, _, _ = model(X_tensor)
+        mu, logvar = model.encode(X_tensor)
+        # Use mu directly (deterministic) instead of reparameterize (stochastic)
+        recon = model.decode(mu)
     return recon.cpu().numpy()
 
 
@@ -295,7 +175,7 @@ def fig_reconstruction_scatter(X_original, X_recon_unsup, X_recon_semisup, featu
         # Unsupervised (top row)
         ax = axes[0, i]
         r2 = r2_score(X_orig_raw[:, i], X_unsup_raw[:, i])
-        ax.scatter(X_orig_raw[::10, i], X_unsup_raw[::10, i], alpha=0.1, s=1)
+        ax.scatter(X_orig_raw[:, i], X_unsup_raw[:, i], alpha=0.05, s=0.5, rasterized=True)
         ax.plot([X_orig_raw[:, i].min(), X_orig_raw[:, i].max()],
                 [X_orig_raw[:, i].min(), X_orig_raw[:, i].max()], 'r--', lw=2)
         ax.set_xlabel(f'True {name}')
@@ -305,7 +185,7 @@ def fig_reconstruction_scatter(X_original, X_recon_unsup, X_recon_semisup, featu
         # Semi-supervised (bottom row)
         ax = axes[1, i]
         r2 = r2_score(X_orig_raw[:, i], X_semisup_raw[:, i])
-        ax.scatter(X_orig_raw[::10, i], X_semisup_raw[::10, i], alpha=0.1, s=1)
+        ax.scatter(X_orig_raw[:, i], X_semisup_raw[:, i], alpha=0.05, s=0.5, rasterized=True)
         ax.plot([X_orig_raw[:, i].min(), X_orig_raw[:, i].max()],
                 [X_orig_raw[:, i].min(), X_orig_raw[:, i].max()], 'r--', lw=2)
         ax.set_xlabel(f'True {name}')
