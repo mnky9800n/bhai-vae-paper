@@ -1,0 +1,429 @@
+# BHAI VAE Paper - Codebase Documentation
+
+> **⚠️ DEPRECATED:** This file has been replaced by structured documentation in `docs/`.
+> 
+> See:
+> - `docs/README.md` - Overview and quick start
+> - `docs/models.md` - Model architectures
+> - `docs/scripts.md` - Script reference
+> - `docs/figures.md` - Figure provenance
+> - `docs/data.md` - Data files
+> - `docs/training.md` - Training procedures
+> - `docs/issues.md` - Known issues
+
+---
+
+**Last audited:** 2026-02-05
+
+This document provides a complete inventory and technical explanation of the BHAI VAE paper codebase.
+
+---
+
+## Table of Contents
+1. [Directory Structure](#directory-structure)
+2. [Scripts Inventory](#scripts-inventory)
+3. [Model Files](#model-files)
+4. [Figures Inventory](#figures-inventory)
+5. [Data Files](#data-files)
+6. [Model Architecture](#model-architecture)
+7. [Training Pipeline](#training-pipeline)
+8. [Figure Generation Pipeline](#figure-generation-pipeline)
+9. [Reproducibility](#reproducibility)
+10. [Identified Inconsistencies](#identified-inconsistencies)
+
+---
+
+## Directory Structure
+
+```
+bhai-vae-paper/
+├── data/                           # Training data and results
+│   ├── vae_training_data_v2_20cm.csv   # Main training dataset (238,506 rows)
+│   ├── embeddings.csv                  # Generated embeddings table
+│   └── zeroshot_*.csv                  # Bootstrap/zeroshot evaluation results
+├── figures/                        # Generated figures for paper
+├── models/                         # Model definitions and checkpoints
+│   ├── vae.py                      # Model architecture definitions (source of truth)
+│   ├── __init__.py                 # Exports VAE, SemiSupervisedVAE, etc.
+│   ├── unsup.pt                    # Trained unsupervised VAE
+│   ├── semisup.pt                  # Trained semi-supervised VAE
+│   ├── model_unsup_hybrid.pt       # Hybrid-loss unsupervised VAE
+│   ├── model_semisup_hybrid.pt     # Hybrid-loss semi-supervised VAE
+│   └── embeddings_hybrid.npz       # Cached embeddings from hybrid models
+├── scripts/                        # Python scripts and shell scripts
+├── notebooks/                      # Jupyter notebooks
+│   └── paper_figures.ipynb         # Interactive figure generation
+├── results/                        # SVM classification results
+├── run_bootstrap_1337.py           # Bootstrap evaluation (100 iterations)
+├── run_bootstrap_full.py           # Full-sample bootstrap evaluation
+├── run_figures.sh                  # Shell wrapper for figure generation
+├── pyproject.toml                  # Project dependencies (uv/pip)
+└── *.log                           # Training/evaluation logs
+```
+
+---
+
+## Scripts Inventory
+
+### scripts/
+
+| Script | Description |
+|--------|-------------|
+| `train_vae.py` | Train a single VAE model (unsupervised or semi-supervised). Supports all hyperparameters via CLI. |
+| `generate_embeddings.py` | Generate embedding tables from trained models, attach to original data. |
+| `generate_figures.py` | Generate paper figures using `unsup.pt`/`semisup.pt` models. Older version. |
+| `generate_all_figures.py` | **Main figure script.** Trains hybrid models, generates all figures. Uses hybrid loss (mask + KL annealing). |
+| `run_svm.py` | Run SVM classification on embeddings to compare unsup vs semisup. |
+| `fig_r2_scatter_with_ci.py` | Generate R² scatter plot with confidence intervals from bootstrap results. |
+| `remake_reconstruction_scatter.py` | Regenerate reconstruction scatter without subsampling. Uses `unsup.pt`/`semisup.pt`. |
+| `run_bootstrap.sh` | Shell script to run multiple bootstrap training iterations. |
+
+### Root scripts
+
+| Script | Description |
+|--------|-------------|
+| `run_bootstrap_1337.py` | Run 100-iteration bootstrap evaluation with train/test split per iteration. Uses CatBoost. |
+| `run_bootstrap_full.py` | Full-sample bootstrap (no train/test split) - measures embedding capacity. |
+| `run_figures.sh` | Wrapper: `uv run python scripts/generate_all_figures.py "$@"` |
+
+---
+
+## Model Files
+
+### models/
+
+| File | Architecture | Size | Modified | Notes |
+|------|--------------|------|----------|-------|
+| `unsup.pt` | VAE (6→64→32→10→32→64→6) | 38,610 bytes | 2026-02-01 21:01 | Standard VAE, 6,426 params |
+| `semisup.pt` | SemiSupervisedVAE (+ classifier) | 79,046 bytes | 2026-02-01 21:01 | +classifier head, 16,165 params |
+| `model_unsup_hybrid.pt` | VAE (same architecture) | 39,029 bytes | 2026-02-05 17:55 | Hybrid loss training |
+| `model_semisup_hybrid.pt` | SemiSupervisedVAE (same architecture) | 79,469 bytes | 2026-02-05 18:01 | Hybrid loss training |
+| `embeddings_hybrid.npz` | NumPy archive | 20,989,272 bytes | 2026-02-05 18:01 | Contains `unsup`, `semisup`, `y` arrays |
+| `vae.py` | Model definitions | 8,411 bytes | 2026-02-01 20:58 | **Single source of truth** |
+
+**Note:** `unsup.pt`/`semisup.pt` are the "original" models. `*_hybrid.pt` are trained with hybrid loss (masking + KL annealing).
+
+---
+
+## Figures Inventory
+
+| Figure | Size | Modified | Generated By | Description |
+|--------|------|----------|--------------|-------------|
+| `fig_reconstruction_scatter.png` | 585 KB | 2026-02-05 18:01 | `generate_all_figures.py` | 2×6 scatter plots of true vs predicted for each feature |
+| `fig_roc_comparison.png` | 233 KB | 2026-02-05 18:03 | `generate_all_figures.py` | ROC curves for top-10 lithology classes, unsup vs semisup |
+| `fig_umap_lithology.png` | 1.4 MB | 2026-02-05 18:04 | `generate_all_figures.py` | UMAP visualization of embeddings colored by lithology |
+| `fig_zeroshot_scatter.png` | 62 KB | 2026-02-05 18:04 | `generate_all_figures.py` | Zero-shot embedding quality (intra-class distance) |
+| `fig_generated_variables_grid.png` | 122 KB | 2026-02-05 18:04 | `generate_all_figures.py` | Histograms of samples generated from prior |
+| `fig_r2_unsup_vs_semi.png` | 477 KB | 2026-02-03 14:39 | `run_bootstrap_1337.py` | R² scatter comparing unsup vs semisup with CI error bars |
+| `fig_lily_dataset.png` | 199 KB | 2026-02-02 17:20 | Unknown (likely notebook) | Dataset overview |
+| `fig_lily_expedition_map.png` | 1.2 MB | 2026-02-03 17:22 | Unknown (likely notebook) | Geographic map of expeditions |
+| `fig_lily_lithology_counts.png` | 176 KB | 2026-02-02 14:51 | Unknown (likely notebook) | Bar chart of lithology class counts |
+| `fig_lily_variables_dist.png` | 418 KB | 2026-02-02 17:20 | Unknown (likely notebook) | Distribution of input variables |
+
+**⚠️ Inconsistency:** `fig_lily_*` figures appear to be generated from the Jupyter notebook, not from the Python scripts. They use `cartopy` which is in dependencies but not imported in any script.
+
+---
+
+## Data Files
+
+### data/
+
+| File | Size | Rows | Columns | Description |
+|------|------|------|---------|-------------|
+| `vae_training_data_v2_20cm.csv` | 25.6 MB | 238,507 | 9 | Main training data (20cm depth bins) |
+| `embeddings.csv` | 80.4 MB | — | 29 | Original data + 20 embedding columns |
+| `zeroshot_results.csv` | 1.8 KB | 4 | 4 | Small initial zeroshot test |
+| `zeroshot_results_full.csv` | 20 KB | — | — | Full zeroshot evaluation |
+| `zeroshot_results_with_ci.csv` | 27 KB | — | — | With confidence intervals |
+| `zeroshot_bootstrap_1337.csv` | 39 KB | — | — | 100-iteration bootstrap results |
+| `zeroshot_bootstrap_full.csv` | 61 KB | — | — | Full-sample bootstrap results |
+| `zeroshot_scatter_results_*.csv` | varies | — | — | Results for scatter plots |
+
+### Training Data Format (`vae_training_data_v2_20cm.csv`)
+
+```
+Columns:
+  1. Borehole_ID         - e.g., "346-U1422-A"
+  2. Depth_Bin           - Depth in meters (0.2m bins)
+  3. Bulk density (GRA)  - g/cm³
+  4. Principal           - Lithology class (139 unique values)
+  5. Magnetic susceptibility (instr. units)
+  6. NGR total counts (cps)
+  7. R                   - Red channel
+  8. G                   - Green channel
+  9. B                   - Blue channel
+```
+
+**Features used for training (6D):**
+1. Bulk density (GRA)
+2. Magnetic susceptibility (instr. units)
+3. NGR total counts (cps)
+4. R, G, B
+
+---
+
+## Model Architecture
+
+### DistributionAwareScaler
+
+Custom preprocessing scaler defined in `models/vae.py`:
+
+```python
+- Columns 1, 2 (Mag susc, NGR): signed log transform
+    sign(x) * log1p(|x|)
+- Columns 3, 4, 5 (R, G, B): log1p transform
+    log1p(x)
+- All columns: StandardScaler
+```
+
+### VAE (Unsupervised)
+
+```
+Architecture:
+  Encoder: input(6) → Linear(64) → ReLU → BatchNorm
+                    → Linear(32) → ReLU → BatchNorm
+                    → [fc_mu(10), fc_logvar(10)]
+  
+  Decoder: z(10) → Linear(32) → ReLU → BatchNorm
+                 → Linear(64) → ReLU → BatchNorm
+                 → Linear(6)
+
+Parameters: 6,426 total
+  - Encoder: ~2,500
+  - Latent projections: ~640
+  - Decoder: ~3,200
+
+Loss: MSE(reconstruction) + β × KL_divergence
+  - β default: 1.0
+```
+
+### SemiSupervisedVAE
+
+```
+Same encoder/decoder as VAE, plus:
+
+Classifier head:
+  z(10) → Linear(64) → ReLU → Dropout(0.3) → Linear(139)
+
+Parameters: 16,165 total
+  - Base VAE: 6,426
+  - Classifier: 9,739
+
+Loss: MSE(recon) + β × KL + α × CrossEntropy(classification)
+  - β default: 1.0
+  - α default: 0.1
+```
+
+---
+
+## Training Pipeline
+
+### Standard Training (`scripts/train_vae.py`)
+
+```bash
+# Unsupervised
+python scripts/train_vae.py \
+    --model unsupervised \
+    --data data/vae_training_data_v2_20cm.csv \
+    --output models/unsup.pt \
+    --epochs 100 \
+    --batch-size 256 \
+    --lr 1e-3 \
+    --beta 1.0 \
+    --seed 42
+
+# Semi-supervised
+python scripts/train_vae.py \
+    --model semisupervised \
+    --data data/vae_training_data_v2_20cm.csv \
+    --output models/semisup.pt \
+    --epochs 100 \
+    --batch-size 256 \
+    --lr 1e-3 \
+    --beta 1.0 \
+    --alpha 0.1 \
+    --seed 42
+```
+
+### Hybrid Training (`scripts/generate_all_figures.py`)
+
+The hybrid training adds:
+1. **Input masking**: 10% of input features randomly zeroed
+2. **KL annealing**: β ramps from 1e-6 to 0.5 over 30 epochs
+3. **Masked reconstruction loss**: Extra weight (0.5×) on masked positions
+4. **Gradient clipping**: 1.0 max norm
+
+```python
+# Hyperparameters (hardcoded in generate_all_figures.py)
+LATENT_DIM = 10
+HIDDEN_DIMS = [64, 32]
+MASK_RATIO = 0.1
+MASK_WEIGHT = 0.5
+N_EPOCHS = 100
+BATCH_SIZE = 256
+beta_start, beta_end, beta_anneal_epochs = 1e-6, 0.5, 30
+alpha = 0.5  # Classification weight (higher than standard)
+```
+
+### Reproducibility Seeds
+
+| Script | Seed Location | Value |
+|--------|---------------|-------|
+| `train_vae.py` | `--seed` argument | 42 (default) |
+| `generate_all_figures.py` | Module-level constants | 42 (for all RNGs) |
+| `run_bootstrap_1337.py` | `np.random.seed(42)` | 42 |
+| `run_bootstrap_full.py` | `np.random.seed(42)` | 42 |
+
+**⚠️ Note:** `generate_all_figures.py` sets CUDA determinism:
+```python
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+```
+
+---
+
+## Figure Generation Pipeline
+
+### Main Pipeline: `generate_all_figures.py`
+
+```bash
+# Train and generate all figures
+uv run python scripts/generate_all_figures.py
+
+# Skip training, use existing models
+uv run python scripts/generate_all_figures.py --skip-training
+```
+
+**Generates:**
+- `fig_reconstruction_scatter.png` - Uses hybrid models
+- `fig_roc_comparison.png` - SVM on embeddings, top 10 classes
+- `fig_umap_lithology.png` - UMAP of embeddings
+- `fig_zeroshot_scatter.png` - Zero-shot cluster quality
+- `fig_generated_variables_grid.png` - Samples from prior
+
+### Bootstrap Figure: `run_bootstrap_1337.py`
+
+```bash
+uv run python run_bootstrap_1337.py
+```
+
+**Generates:**
+- `fig_r2_unsup_vs_semi.png` - R² comparison with CI
+
+**Requires:** External data at `/home/mnky9800n/clawd/data/lily-datasets/`
+
+### Per-Figure Details
+
+| Figure | Script | Models Used | Data Source |
+|--------|--------|-------------|-------------|
+| `fig_reconstruction_scatter.png` | `generate_all_figures.py` | `model_*_hybrid.pt` | `vae_training_data_v2_20cm.csv` |
+| `fig_roc_comparison.png` | `generate_all_figures.py` | `model_*_hybrid.pt` | Training data |
+| `fig_umap_lithology.png` | `generate_all_figures.py` | `model_*_hybrid.pt` | Training data |
+| `fig_zeroshot_scatter.png` | `generate_all_figures.py` | `model_*_hybrid.pt` | Training data |
+| `fig_generated_variables_grid.png` | `generate_all_figures.py` | `model_*_hybrid.pt` | N/A (samples from prior) |
+| `fig_r2_unsup_vs_semi.png` | `run_bootstrap_1337.py` | `unsup.pt`/`semisup.pt` | Training + LILY datasets |
+| `fig_lily_*.png` | `notebooks/paper_figures.ipynb` | Unknown | Unknown |
+
+---
+
+## Reproducibility
+
+### To Reproduce All Figures
+
+```bash
+cd /home/mnky9800n/clawd/bhai-vae-paper
+
+# 1. Install dependencies
+uv sync
+
+# 2. Train hybrid models and generate main figures
+uv run python scripts/generate_all_figures.py
+
+# 3. Run bootstrap for R² scatter (requires LILY data)
+uv run python run_bootstrap_1337.py
+
+# 4. For fig_lily_* figures, run the notebook:
+#    notebooks/paper_figures.ipynb
+```
+
+### Key Requirements
+- Python 3.10+
+- PyTorch 2.0+
+- CUDA optional (will use CPU if unavailable)
+- External data: `/home/mnky9800n/clawd/data/lily-datasets/*.csv`
+
+---
+
+## Identified Inconsistencies
+
+### 1. Duplicate Model Training Logic
+
+**Issue:** Training logic exists in two places with different hyperparameters:
+- `scripts/train_vae.py` - Standard training, β=1.0, no masking
+- `scripts/generate_all_figures.py` - Hybrid training, β annealing, masking, α=0.5
+
+**Impact:** The `*_hybrid.pt` models are trained differently than `unsup.pt`/`semisup.pt`.
+
+### 2. Model Files Don't Match Script Usage
+
+**Issue:** 
+- `unsup.pt`/`semisup.pt` were created by `train_vae.py` (Feb 1)
+- `model_*_hybrid.pt` were created by `generate_all_figures.py` (Feb 5)
+- `fig_r2_unsup_vs_semi.png` uses the old models, while other figures use hybrid models
+
+### 3. Orphaned Figures
+
+**Issue:** `fig_lily_*.png` figures have no corresponding generation script:
+- `fig_lily_dataset.png`
+- `fig_lily_expedition_map.png`
+- `fig_lily_lithology_counts.png`
+- `fig_lily_variables_dist.png`
+
+**Likely source:** `notebooks/paper_figures.ipynb` (requires Cartopy for maps)
+
+### 4. Inconsistent α Values
+
+| Script | α value | Notes |
+|--------|---------|-------|
+| `train_vae.py` | 0.1 | Default |
+| `generate_all_figures.py` | 0.5 | Hardcoded |
+| README.md | 0.1 | Documented |
+
+### 5. External Data Dependency
+
+**Issue:** `run_bootstrap_1337.py` requires data at:
+```
+/home/mnky9800n/clawd/data/lily-datasets/
+```
+
+This path is hardcoded and won't work on other machines.
+
+### 6. generate_figures.py vs generate_all_figures.py
+
+**Issue:** Two similar scripts exist:
+- `generate_figures.py` (older, uses `unsup.pt`/`semisup.pt`, simpler)
+- `generate_all_figures.py` (newer, trains hybrid models, more comprehensive)
+
+The README mentions neither by name, only references the notebook.
+
+### 7. Reconstruction Scatter Regeneration
+
+`remake_reconstruction_scatter.py` uses `unsup.pt`/`semisup.pt` but the main figure pipeline uses `*_hybrid.pt`. Running this script would overwrite with different results.
+
+---
+
+## Summary
+
+This codebase implements VAE and Semi-Supervised VAE models for IODP core physical property embeddings. The key files are:
+
+- **Model definitions:** `models/vae.py` (single source of truth)
+- **Main figure generation:** `scripts/generate_all_figures.py`
+- **Bootstrap evaluation:** `run_bootstrap_1337.py`
+
+To regenerate all figures deterministically:
+```bash
+uv run python scripts/generate_all_figures.py
+uv run python run_bootstrap_1337.py  # requires external LILY data
+```
+
+**⚠️ Warning:** Some figures (`fig_lily_*`) require running the Jupyter notebook.
